@@ -56,7 +56,7 @@ interface TeamContextType {
 const TeamContext = createContext<TeamContextType | undefined>(undefined);
 
 export function TeamProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamRoles, setTeamRoles] = useState<Record<string, 'owner' | 'manager'>>({});
   const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
@@ -157,8 +157,10 @@ export function TeamProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    if (authLoading) return;
+    setLoading(true);
     fetchTeams();
-  }, [user]);
+  }, [user, authLoading]);
 
   const currentTeamRole = currentTeam ? teamRoles[currentTeam.id] || null : null;
   const isOwner = currentTeamRole === 'owner';

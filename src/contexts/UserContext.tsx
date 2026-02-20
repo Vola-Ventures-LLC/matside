@@ -61,7 +61,7 @@ interface UserContextType {
 const UserContextContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserContextProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [contexts, setContexts] = useState<UserContextItem[]>([]);
   const [currentContext, setCurrentContext] = useState<UserContextItem | null>(null);
   const [leagues, setLeagues] = useState<League[]>([]);
@@ -195,8 +195,10 @@ export function UserContextProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    if (authLoading) return;
+    setLoading(true);
     fetchContexts();
-  }, [user]);
+  }, [user, authLoading]);
 
   return (
     <UserContextContext.Provider
