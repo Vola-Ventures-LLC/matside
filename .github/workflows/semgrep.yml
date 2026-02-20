@@ -1,0 +1,56 @@
+name: Semgrep Security Scan
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    - cron: "0 3 * * *"
+
+jobs:
+  semgrep:
+    name: Semgrep Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    container:
+      image: semgrep/semgrep
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        run: |
+          CONFIG_ARGS="--config=p/security-audit --config=p/owasp-top-ten --config=p/react --config=p/typescript --config=p/jwt"
+          if [ -d ".semgrep/rules" ]; then
+            CONFIG_ARGS="$CONFIG_ARGS --config=.semgrep/rules"
+          fi
+
+          semgrep scan \
+            $CONFIG_ARGS \
+            --sarif \
+            --output=semgrep-results.sarif \
+            --error \
+            --severity=ERROR \
+            --severity=WARNING \
+            --exclude=vendor/
+        continue-on-error: true
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: semgrep-results.sarif
+          category: semgrep
+
+      - name: Upload results as artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-results
+          path: semgrep-results.sarif

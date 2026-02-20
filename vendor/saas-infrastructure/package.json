@@ -1,0 +1,36 @@
+{
+  "name": "@saas-infra/root",
+  "private": true,
+  "version": "0.0.0",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "turbo build",
+    "clean": "turbo clean",
+    "create-product": "node scripts/create-product.js",
+    "create-standalone": "node scripts/create-standalone-product.js",
+    "dev": "turbo dev",
+    "dev:product-one": "pnpm --filter @saas-infra/product-one dev",
+    "dev:product-template": "pnpm --filter @saas-infra/product-template dev",
+    "license-check": "license-checker --summary --production --excludePrivatePackages --onlyAllow 'MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;Unlicense'",
+    "lint": "turbo lint",
+    "prepare": "husky",
+    "sbom": "pnpm list --json --depth=Infinity > sbom.json || echo '{}' > sbom.json",
+    "test": "turbo test"
+  },
+  "devDependencies": {
+    "@cyclonedx/cyclonedx-npm": "^4.1.2",
+    "husky": "^9.1.7",
+    "license-checker": "^25.0.1",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.8.1",
+    "turbo": "^2.4.4"
+  },
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "lint-staged": {
+    "*.{json,md,yml,yaml}": "prettier --write"
+  }
+}

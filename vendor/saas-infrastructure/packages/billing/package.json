@@ -1,0 +1,32 @@
+{
+  "name": "@saas-infra/billing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./use-coupons": "./src/hooks/useCoupons.ts",
+    "./components/*": "./src/components/*.tsx"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@saas-infra/auth": "workspace:*",
+    "@saas-infra/ui": "workspace:*",
+    "@saas-infra/utils": "workspace:*",
+    "@supabase/supabase-js": "catalog:",
+    "date-fns": "catalog:",
+    "lucide-react": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "devDependencies": {
+    "@saas-infra/config": "workspace:*",
+    "@types/react": "catalog:",
+    "typescript": "catalog:"
+  }
+}

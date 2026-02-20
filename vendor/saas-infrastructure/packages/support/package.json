@@ -1,0 +1,34 @@
+{
+  "name": "@saas-infra/support",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./components/*": "./src/components/*.tsx",
+    "./hooks/*": "./src/hooks/*.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@saas-infra/auth": "workspace:*",
+    "@saas-infra/ui": "workspace:*",
+    "@saas-infra/utils": "workspace:*",
+    "@supabase/supabase-js": "catalog:",
+    "date-fns": "catalog:",
+    "lucide-react": "catalog:",
+    "react-markdown": "catalog:",
+    "@tanstack/react-query": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "devDependencies": {
+    "@saas-infra/config": "workspace:*",
+    "@types/react": "catalog:",
+    "typescript": "catalog:"
+  }
+}

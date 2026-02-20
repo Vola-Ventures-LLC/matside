@@ -1,0 +1,30 @@
+PLAN: Project: SaaS for Matside wrestling pairing softwrae
+
+#SETUP SAAS TEMPLATE
+copy product one from saas-infrastructure as the starting point for this Project. create a launch checklist with instructions based on saas-infrastructure for all the accounts I need to setup. 
+
+#MIGRATE FROM LOVABLE
+I started this project in lovable and want to bring over the code (https://github.com/nataliehirsch-cmyk/hometownpass), 
+but it has to be retrofitted to work within the framework for saas-infrastructure. 
+You will have to migrate the database and auth to supabase as well. 
+Every concept needs to be brought over, including logos, favicons, user guides, marketing pages, and of course the app. Double check that all custom CSS transfers.
+There are no customers in the app so you don't need to worry about downtime. 
+We recently completed similar migrations for hometownpass and snackstand. 
+
+#UNIT TEST
+Write and run comprehensive unit tests, and address bugs found. Document any testing gaps. 
+
+#LOCAL BOT UAT TESTING
+Use the local-UAT-bot project to test everything on localhost. Read the claud.md file in that project for guidelines and expected output. 
+
+Do exploratory testing of all pages, as well as follow the user guides.  Use emails in format natalie.hirsch+{uuid}@volaventures.com if you need to create accounts. Your goal is to test as a human would as much as possible. If you are forced to use the database so that you aren't blocked then it needs to be recorded as a bug. Document testing gaps. Address bugs found.
+
+#DEPLOY TO PREVIEW
+Setup a vercel ci/cd pipeline dev->preview->prod
+When unit and local UAT passes all test it should deploy to preview. WE should run security tests automatically. 
+
+#DEPLOY TO PRODUCTION
+I will tell you when to deploy from preview to prod. We should keep the dev/preview databases separate from production. 
+
+#ADDITIONAL DEVELOPMENT
+THis project will require additional development, which should follow the framework outlined in claud.md: product coach -> PRD -> mockups -> human approval -> parallel review (engineer, architect, executive) -> human approval -> developer -> tester -> local UAT bot -> commit and deploy to preview

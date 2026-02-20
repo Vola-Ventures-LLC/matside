@@ -1,0 +1,10 @@
+{
+  "extends": "@saas-infra/config/tsconfig/react-library.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "@saas-infra/auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./provider": "./src/provider.ts",
+    "./use-auth": "./src/hooks/useAuth.tsx",
+    "./use-2fa": "./src/hooks/use2FA.ts",
+    "./use-role-context": "./src/hooks/useRoleContext.tsx",
+    "./components/*": "./src/components/*.tsx"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@saas-infra/utils": "workspace:*",
+    "@supabase/supabase-js": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "react-router-dom": "^6.0.0"
+  },
+  "devDependencies": {
+    "@saas-infra/config": "workspace:*",
+    "@types/react": "catalog:",
+    "typescript": "catalog:"
+  }
+}
