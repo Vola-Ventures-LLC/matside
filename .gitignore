@@ -36,3 +36,4 @@ coverage/
 
 # Supabase
 supabase/.temp/
+.vercel/cache
