@@ -55,7 +55,7 @@
     "react-resizable-panels": "^2.1.9",
     "recharts": "catalog:",
     "sonner": "catalog:",
-    "vaul": "^0.9.9"
+    "vaul": "^1.1.2"
   },
   "devDependencies": {
     "@saas-infra/config": "workspace:*",
