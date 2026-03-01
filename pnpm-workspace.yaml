@@ -45,7 +45,7 @@ catalog:
 
   # Forms
   "@hookform/resolvers": ^3.10.0
-  react-hook-form: ^7.71.1
+  react-hook-form: ^7.71.2
 
   # Development dependencies
   typescript: ^5.8.3
