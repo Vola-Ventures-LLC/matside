@@ -1,31 +1,40 @@
-name: Semgrep Security Scan
+name: Semgrep SAST
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, master]
   pull_request:
-    branches: [main, dev]
+    branches: [main, master]
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "0 3 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
 
 jobs:
   semgrep:
     name: Semgrep Scan
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-
     container:
       image: semgrep/semgrep
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Run Semgrep
         run: |
-          CONFIG_ARGS="--config=p/security-audit --config=p/owasp-top-ten --config=p/react --config=p/typescript --config=p/jwt"
+          CONFIG_ARGS="--config=p/security-audit --config=p/owasp-top-ten --config=p/typescript"
+
+          if [ -f "package.json" ] && grep -q '"react"' package.json 2>/dev/null; then
+            CONFIG_ARGS="$CONFIG_ARGS --config=p/react"
+          fi
+
+          if [ -f "package.json" ] && grep -q '"jsonwebtoken\|jwt"' package.json 2>/dev/null; then
+            CONFIG_ARGS="$CONFIG_ARGS --config=p/jwt"
+          fi
+
           if [ -d ".semgrep/rules" ]; then
             CONFIG_ARGS="$CONFIG_ARGS --config=.semgrep/rules"
           fi
@@ -36,21 +45,21 @@ jobs:
             --output=semgrep-results.sarif \
             --error \
             --severity=ERROR \
-            --severity=WARNING \
-            --exclude=vendor/
+            --severity=WARNING
         continue-on-error: true
 
-      - name: Upload SARIF results
-        uses: github/codeql-action/upload-sarif@v4
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         continue-on-error: true
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
 
-      - name: Upload results as artifact
+      - name: Upload results artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: semgrep-results
           path: semgrep-results.sarif
+          retention-days: 30
