@@ -38,7 +38,7 @@ catalog:
   rehype-raw: ^7.0.0
 
   # Charts
-  recharts: ^2.15.4
+  recharts: ^3.7.0
 
   # PDF generation (used by @saas-infra packages)
   jspdf: ^4.1.0
