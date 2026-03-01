@@ -1,0 +1,46 @@
+version: 2
+
+updates:
+  # npm dependencies
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 10
+    reviewers:
+      - volaventures/developers
+    labels:
+      - dependencies
+      - security
+    # Auto-merge patch updates when all checks pass
+    # (configured via GitHub branch rules, not here — Dependabot creates the PR,
+    # branch protection auto-merges if status checks pass)
+    commit-message:
+      prefix: "chore(deps):"
+      include: scope
+    # Group minor/patch updates to reduce PR noise
+    groups:
+      patch-updates:
+        update-types:
+          - patch
+      minor-updates:
+        update-types:
+          - minor
+
+  # GitHub Actions versions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: "chore(ci):"

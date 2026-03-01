@@ -1,0 +1,271 @@
+name: Security Scanning
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+  actions: read
+
+jobs:
+  npm-audit:
+    name: Dependency Audit (SCA)
+    runs-on: ubuntu-latest
+    outputs:
+      critical-count: ${{ steps.parse.outputs.critical }}
+      high-count: ${{ steps.parse.outputs.high }}
+      moderate-count: ${{ steps.parse.outputs.moderate }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Generate package-lock.json for scanner compatibility
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Run npm audit
+        id: audit
+        run: |
+          set +e
+          npm audit --json > audit-results.json 2>&1
+          AUDIT_EXIT=$?
+          echo "exit_code=$AUDIT_EXIT" >> $GITHUB_OUTPUT
+          # Don't fail here — let the parse step decide
+          exit 0
+
+      - name: Parse audit results
+        id: parse
+        run: |
+          if [ ! -f audit-results.json ]; then
+            echo "critical=0" >> $GITHUB_OUTPUT
+            echo "high=0" >> $GITHUB_OUTPUT
+            echo "moderate=0" >> $GITHUB_OUTPUT
+            echo "low=0" >> $GITHUB_OUTPUT
+            echo "total=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          CRITICAL=$(jq '.metadata.vulnerabilities.critical // 0' audit-results.json 2>/dev/null || echo "0")
+          HIGH=$(jq '.metadata.vulnerabilities.high // 0' audit-results.json 2>/dev/null || echo "0")
+          MODERATE=$(jq '.metadata.vulnerabilities.moderate // 0' audit-results.json 2>/dev/null || echo "0")
+          LOW=$(jq '.metadata.vulnerabilities.low // 0' audit-results.json 2>/dev/null || echo "0")
+          TOTAL=$(jq '.metadata.vulnerabilities.total // 0' audit-results.json 2>/dev/null || echo "0")
+
+          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "high=$HIGH" >> $GITHUB_OUTPUT
+          echo "moderate=$MODERATE" >> $GITHUB_OUTPUT
+          echo "low=$LOW" >> $GITHUB_OUTPUT
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
+
+      - name: Post inline PR comments for vulnerable dependencies
+        if: github.event_name == 'pull_request' && (steps.parse.outputs.critical != '0' || steps.parse.outputs.high != '0')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const auditData = JSON.parse(fs.readFileSync('audit-results.json', 'utf-8'));
+            const vulns = auditData.vulnerabilities || {};
+            const comments = [];
+
+            for (const [name, vuln] of Object.entries(vulns)) {
+              if (vuln.severity !== 'critical' && vuln.severity !== 'high') continue;
+              const via = (vuln.via || []).map(v => typeof v === 'string' ? v : v.title || v.name || 'unknown').join(', ');
+              const range = vuln.range || 'unknown';
+              const fix = vuln.fixAvailable ? (typeof vuln.fixAvailable === 'object' ? `Update to ${vuln.fixAvailable.name}@${vuln.fixAvailable.version}` : 'Fix available via npm audit fix') : 'No automated fix available';
+              comments.push({
+                path: 'package.json',
+                line: 1,
+                body: `**[${vuln.severity.toUpperCase()}]** \`${name}\` (${range})\n\nVia: ${via}\n\n**Fix:** ${fix}`
+              });
+            }
+
+            if (comments.length > 0) {
+              try {
+                await github.rest.pulls.createReview({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.issue.number,
+                  event: 'COMMENT',
+                  comments: comments.slice(0, 50),
+                });
+              } catch (e) {
+                console.log('Could not post inline review (may be a push, not a PR):', e.message);
+              }
+            }
+
+      - name: Fail on Critical or High vulnerabilities
+        if: steps.parse.outputs.critical != '0' || steps.parse.outputs.high != '0'
+        run: |
+          echo "::error::Found ${{ steps.parse.outputs.critical }} critical and ${{ steps.parse.outputs.high }} high severity vulnerabilities"
+          echo ""
+          echo "Critical + High vulnerabilities block merge. Fix these before proceeding:"
+          echo ""
+          jq -r '.vulnerabilities | to_entries[] | select(.value.severity == "critical" or .value.severity == "high") | "  [\(.value.severity | ascii_upcase)] \(.key): \(.value.title // "No title") (via \(.value.via[0] // "unknown"))"' audit-results.json 2>/dev/null || true
+          exit 1
+
+      - name: Upload audit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-results
+          path: audit-results.json
+          retention-days: 30
+
+  codeql:
+    name: CodeQL SAST Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Run CodeQL Analysis
+        id: analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
+
+  secret-scanning:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    outputs:
+      leaks-found: ${{ steps.gitleaks.outputs.leaks-found }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks scan
+        id: gitleaks
+        uses: gitleaks/gitleaks-action@cb7149a9b7c895e4b23f7d49c7a7e4100b528697  # v2.0.0 pinned
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - npm-audit
+      - codeql
+      - secret-scanning
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Post PR summary comment with findings
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const auditResult = '${{ needs.npm-audit.result }}';
+            const codeqlResult = '${{ needs.codeql.result }}';
+            const secretResult = '${{ needs.secret-scanning.result }}';
+
+            const critical = parseInt('${{ needs.npm-audit.outputs.critical-count }}' || '0');
+            const high = parseInt('${{ needs.npm-audit.outputs.high-count }}' || '0');
+            const moderate = parseInt('${{ needs.npm-audit.outputs.moderate-count }}' || '0');
+
+            const allPassed = auditResult === 'success' && codeqlResult === 'success' && secretResult === 'success';
+            const hasBlockers = critical > 0 || high > 0 || auditResult !== 'success' || codeqlResult !== 'success' || secretResult !== 'success';
+
+            let status = '✅ All security checks passed';
+            if (hasBlockers) {
+              status = '❌ Security checks failed — merge blocked';
+            } else if (moderate > 0) {
+              status = '⚠️ Security checks passed with warnings';
+            }
+
+            let body = `## Security Scan Results\n\n**Status:** ${status}\n\n`;
+            body += `### Dependency Audit (SCA)\n`;
+            body += `| Severity | Count |\n|----------|-------|\n`;
+            body += `| 🔴 Critical | ${critical} |\n`;
+            body += `| 🟠 High | ${high} |\n`;
+            body += `| 🟡 Medium | ${moderate} |\n\n`;
+
+            body += `### Scanner Results\n`;
+            body += `| Scanner | Status |\n|---------|--------|\n`;
+            body += `| npm audit | ${auditResult === 'success' ? '✅ Passed' : '❌ Failed'} |\n`;
+            body += `| CodeQL SAST | ${codeqlResult === 'success' ? '✅ Passed' : codeqlResult === 'skipped' ? '⏭️ Skipped' : '❌ Failed'} |\n`;
+            body += `| Secret scanning | ${secretResult === 'success' ? '✅ Passed' : '❌ Failed'} |\n\n`;
+
+            if (hasBlockers) {
+              body += `### 🚫 Blocking Issues\n\n`;
+              if (critical > 0 || high > 0) {
+                body += `**${critical} Critical** and **${high} High** severity dependency vulnerabilities found.\n`;
+                body += `Run \`npm audit\` locally to see details. Fix vulnerabilities or update dependencies before merging.\n\n`;
+              }
+              if (codeqlResult !== 'success') {
+                body += `**CodeQL SAST analysis found issues.** Check the Security tab for details.\n\n`;
+              }
+              if (secretResult !== 'success') {
+                body += `**Secrets detected in code.** Remove exposed credentials immediately.\n\n`;
+              }
+            }
+
+            if (moderate > 0) {
+              body += `### ⚠️ Warnings (non-blocking)\n\n`;
+              body += `**${moderate} Medium** severity vulnerabilities found. Consider fixing these.\n\n`;
+            }
+
+            body += `---\n`;
+            body += `*Threshold: Critical + High = block merge | Medium + Low = warning only*\n`;
+            body += `*False positives? Use \`npm audit\` override or \`// lgtm[rule-id]\` inline comments.*`;
+
+            // Find and update existing comment, or create new one
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.body.includes('## Security Scan Results') && c.user.type === 'Bot'
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body,
+              });
+            }
+
+      - name: Fail if any security check did not succeed (fail closed per FR-3)
+        if: needs.npm-audit.result != 'success' || needs.codeql.result != 'success' || needs.secret-scanning.result != 'success'
+        run: |
+          echo "::error::One or more security checks did not succeed. Merge is blocked (fail closed)."
+          echo "npm-audit: ${{ needs.npm-audit.result }}"
+          echo "codeql: ${{ needs.codeql.result }}"
+          echo "secret-scanning: ${{ needs.secret-scanning.result }}"
+          exit 1
