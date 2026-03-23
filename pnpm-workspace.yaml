@@ -9,14 +9,14 @@ catalog:
   react-router-dom: ^6.30.1
 
   # Supabase
-  "@supabase/supabase-js": ^2.94.0
+  "@supabase/supabase-js": ^2.100.0
 
   # State management & data fetching
-  "@tanstack/react-query": ^5.83.0
+  "@tanstack/react-query": ^5.95.0
 
   # UI & icons
-  lucide-react: ^0.462.0
-  next-themes: ^0.3.0
+  lucide-react: ^0.577.0
+  next-themes: ^0.4.6
   sonner: ^1.7.4
 
   # Utilities
@@ -45,7 +45,7 @@ catalog:
 
   # Forms
   "@hookform/resolvers": ^3.10.0
-  react-hook-form: ^7.71.2
+  react-hook-form: ^7.72.0
 
   # Development dependencies
   typescript: ^5.8.3
