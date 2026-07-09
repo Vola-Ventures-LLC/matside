@@ -6,7 +6,7 @@ pnpm exec lint-staged --config .lintstagedrc.mjs
 
 # Check for secrets
 echo "Scanning for secrets..."
-FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -v '\.md$' | grep -v '^\.husky/' | grep -v '^\.semgrep/' | grep -v '^vendor/')
+FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -v '\.md$' | grep -v '^\.husky/' | grep -v '^\.semgrep/' | grep -v '^vendor/' || true)
 
 if [ -n "$FILES" ]; then
   if echo "$FILES" | xargs grep -l "eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*" 2>/dev/null; then
