@@ -1,0 +1,39 @@
+name: Socket.dev Supply Chain Security
+
+# NOTE: This workflow requires SOCKET_API_TOKEN secret to run.
+# Without the token, the job will be skipped (no failure annotations or emails).
+# To enable: Configure SOCKET_API_TOKEN secret in repo settings (requires Socket.dev account).
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/package.json"
+      - "**/pnpm-lock.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "**/package.json"
+      - "**/pnpm-lock.yaml"
+
+jobs:
+  socket:
+    name: Supply Chain Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Socket.dev Scan
+        if: ${{ secrets.SOCKET_API_TOKEN != '' }}
+        uses: SocketDev/socket-security-action@v1
+        with:
+          # Auto-detects repository if project-id is not provided
+          api-token: ${{ secrets.SOCKET_API_TOKEN }}
+          # Optional: fail on high severity issues
+          severity: high
+        continue-on-error: true

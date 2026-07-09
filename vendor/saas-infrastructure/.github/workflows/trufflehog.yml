@@ -1,0 +1,31 @@
+name: TruffleHog Secret Scanning
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  trufflehog:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for comprehensive scan
+
+      - name: TruffleHog Scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          # Scan from base branch to current
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          # Output JSON format for GitHub Actions
+          extra_args: --json --github-actions --no-verification
+        continue-on-error: true

@@ -78,6 +78,7 @@ import { AddMatchSheet } from '@/components/meets/AddMatchSheet';
 import { PairingStatusBar } from '@/components/meets/PairingStatusBar';
 import { AuditTrailSheet } from '@/components/meets/AuditTrailSheet';
 import { ApprovalQueueSheet } from '@/components/meets/ApprovalQueueSheet';
+import { GenerationReportSheet, type ZeroMatchWrestler } from '@/components/meets/GenerationReportSheet';
 import { ScratchWrestlerDialog } from '@/components/meets/ScratchWrestlerDialog';
 import { ChangesSummarySheet } from '@/components/meets/ChangesSummarySheet';
 import { Settings2, FileSpreadsheet, LayoutGrid, Maximize2, Minimize2, UserPlus } from 'lucide-react';
@@ -130,6 +131,7 @@ interface Wrestler {
   attendance_status: string;
   match_count: number;
   is_flagged: boolean;
+  flag_severity: 'critical' | 'warning' | null;
   flag_reason: string | null;
   discussion_flag: DiscussionFlag | null;
 }
@@ -149,6 +151,19 @@ interface Match {
 
 type SortField = 'last_name' | 'first_name' | 'age' | 'weight' | 'experience' | 'skill' | 'match_count' | 'team' | 'attendance' | 'flagged';
 type SortDirection = 'asc' | 'desc';
+
+export function getFlagSeverity(
+  matchCount: number,
+  attendanceStatus: string,
+  totalMatchesGenerated: number,
+): 'critical' | 'warning' | null {
+  if (totalMatchesGenerated === 0) return null;
+  const isAttending = ['attending', 'arriving_late', 'leaving_early'].includes(attendanceStatus);
+  if (matchCount === 0 && isAttending) return 'critical';
+  if (matchCount < 2 && isAttending) return 'warning';
+  if (matchCount > 5) return 'warning';
+  return null;
+}
 
 export default function MeetPairings() {
   const { meetId } = useParams<{ meetId: string }>();
@@ -184,6 +199,17 @@ export default function MeetPairings() {
   const [addMatchWrestler, setAddMatchWrestler] = useState<Wrestler | null>(null);
   const [matRules, setMatRules] = useState<{ mat_number: number; min_age: number; max_age: number; min_experience: number; max_experience: number; min_skill: number; max_skill: number; max_matches: number }[]>([]);
   
+  // Generation report state
+  const [generationReportOpen, setGenerationReportOpen] = useState(false);
+  const [generationReportData, setGenerationReportData] = useState<{
+    matchesCreated: number;
+    wrestlersWithZeroMatches: ZeroMatchWrestler[];
+  } | null>(null);
+
+  // Session-local set of match IDs created by incremental generation (for "New" badge)
+  const [newMatchIds, setNewMatchIds] = useState<Set<string>>(new Set());
+  const [generatingIncremental, setGeneratingIncremental] = useState(false);
+
   // Pairing status state
   const [auditSheetOpen, setAuditSheetOpen] = useState(false);
   const [approvalQueueOpen, setApprovalQueueOpen] = useState(false);
@@ -370,18 +396,16 @@ export default function MeetPairings() {
       const discussionFlag = flagsMap.get(w.id) || null;
       
       // Flag logic - only flag when matches have been generated
-      let isFlagged = false;
-      let flagReason: string | null = null;
       const totalMatchesGenerated = Object.values(matchCounts).reduce((sum, c) => sum + c, 0) / 2;
-      
-      if (totalMatchesGenerated > 0) {
-        if (matchCount < 2 && ['attending', 'arriving_late', 'leaving_early'].includes(status)) {
-          isFlagged = true;
-          flagReason = `Only ${matchCount} match${matchCount === 1 ? '' : 'es'}`;
-        } else if (matchCount > 5) {
-          isFlagged = true;
-          flagReason = `${matchCount} matches (max recommended: 5)`;
-        }
+      const flagSeverity = getFlagSeverity(matchCount, status, totalMatchesGenerated);
+      const isFlagged = flagSeverity !== null;
+      let flagReason: string | null = null;
+      if (flagSeverity === 'critical') {
+        flagReason = 'No match assigned';
+      } else if (flagSeverity === 'warning' && matchCount < 2) {
+        flagReason = `Only ${matchCount} match${matchCount === 1 ? '' : 'es'}`;
+      } else if (flagSeverity === 'warning' && matchCount > 5) {
+        flagReason = `${matchCount} matches (max recommended: 5)`;
       }
 
       return {
@@ -398,6 +422,7 @@ export default function MeetPairings() {
         attendance_status: status,
         match_count: matchCount,
         is_flagged: isFlagged,
+        flag_severity: flagSeverity,
         flag_reason: flagReason,
         discussion_flag: discussionFlag,
       };
@@ -451,15 +476,58 @@ export default function MeetPairings() {
 
       if (response.error) throw new Error(response.error.message);
 
+      const matchesCreated = response.data?.matches_created || 0;
+      const wrestlersWithZeroMatches: ZeroMatchWrestler[] = response.data?.wrestlers_with_zero_matches || [];
+
       toast({
         title: 'Pairings generated!',
-        description: `Created ${response.data?.matches_created || 0} matches.`,
+        description: `Created ${matchesCreated} match${matchesCreated !== 1 ? 'es' : ''}.${wrestlersWithZeroMatches.length > 0 ? ` ${wrestlersWithZeroMatches.length} wrestler${wrestlersWithZeroMatches.length !== 1 ? 's' : ''} unmatched.` : ''}`,
+        variant: wrestlersWithZeroMatches.length > 0 ? 'destructive' : 'default',
       });
+
+      setGenerationReportData({ matchesCreated, wrestlersWithZeroMatches });
+      setGenerationReportOpen(true);
       fetchData();
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Error', description: error.message });
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const generateIncrementalPairings = async () => {
+    if (!meet || !currentTeam) return;
+    setGeneratingIncremental(true);
+
+    try {
+      const response = await supabase.functions.invoke('generate-pairings', {
+        body: { meet_id: meet.id, host_team_id: currentTeam.id, incremental: true },
+      });
+
+      if (response.error) throw new Error(response.error.message);
+
+      const matchesCreated = response.data?.matches_created || 0;
+      const wrestlersWithZeroMatches: ZeroMatchWrestler[] = response.data?.wrestlers_with_zero_matches || [];
+      const returnedNewIds: string[] = response.data?.new_match_ids || [];
+
+      // Merge new IDs into the session-local set
+      setNewMatchIds(prev => new Set([...prev, ...returnedNewIds]));
+
+      toast({
+        title: matchesCreated > 0 ? 'New wrestlers matched!' : 'No new matches added',
+        description: matchesCreated > 0
+          ? `Added ${matchesCreated} new match${matchesCreated !== 1 ? 'es' : ''}.${wrestlersWithZeroMatches.length > 0 ? ` ${wrestlersWithZeroMatches.length} still unmatched.` : ''}`
+          : response.data?.message || 'All attending wrestlers already have matches.',
+        variant: wrestlersWithZeroMatches.length > 0 ? 'destructive' : 'default',
+      });
+
+      setGenerationReportData({ matchesCreated, wrestlersWithZeroMatches });
+      setGenerationReportOpen(true);
+      fetchData();
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Error', description: error.message });
+    } finally {
+      setGeneratingIncremental(false);
     }
   };
 
@@ -649,7 +717,11 @@ export default function MeetPairings() {
     const unconfirmedCount = teams.reduce((sum, t) => sum + t.unconfirmed_count, 0);
     const autoFlaggedCount = wrestlers.filter(w => w.is_flagged).length;
     const discussionFlaggedCount = wrestlers.filter(w => w.discussion_flag).length;
-    return { totalMatches, matchesByMat, unconfirmedCount, autoFlaggedCount, discussionFlaggedCount };
+    // Count confirmed wrestlers with 0 matches — used to show "Add new wrestlers" button
+    const unmatchedAttendingCount = wrestlers.filter(
+      w => ['attending', 'arriving_late', 'leaving_early'].includes(w.attendance_status) && w.match_count === 0
+    ).length;
+    return { totalMatches, matchesByMat, unconfirmedCount, autoFlaggedCount, discussionFlaggedCount, unmatchedAttendingCount };
   }, [matches, teams, wrestlers]);
 
   // Get matches for selected wrestler
@@ -724,7 +796,7 @@ export default function MeetPairings() {
           {/* Actions row */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              {/* Primary action: Generate (host only, hidden when pairings exist) */}
+              {/* Primary action: Generate (host only) */}
               {currentTeam?.id === meet.host_team_id && matches.length === 0 && (
                 <Button onClick={generatePairings} disabled={generating} size={isMobile ? 'sm' : 'default'}>
                   {generating ? (
@@ -736,6 +808,64 @@ export default function MeetPairings() {
                     <>
                       <Shuffle className="w-4 h-4 mr-2" />
                       {isMobile ? 'Generate' : 'Generate Pairings'}
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {/* Regenerate (host only, when matches already exist — with destructive confirmation) */}
+              {currentTeam?.id === meet.host_team_id && matches.length > 0 && !isMobile && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" disabled={generating} size="default">
+                      {generating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Shuffle className="w-4 h-4 mr-2" />
+                          Regenerate
+                        </>
+                      )}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Regenerate all pairings?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will delete all {matches.length} existing matches and generate new pairings from scratch.
+                        This cannot be undone. Use "Add new wrestlers" instead if you only want to fill in unmatched wrestlers.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={generatePairings} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        Yes, regenerate all
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+
+              {/* Add new wrestlers (incremental) — visible when matches exist AND unmatched wrestlers present */}
+              {currentTeam?.id === meet.host_team_id && matches.length > 0 && stats.unmatchedAttendingCount > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={generateIncrementalPairings}
+                  disabled={generatingIncremental}
+                  size={isMobile ? 'sm' : 'default'}
+                >
+                  {generatingIncremental ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {!isMobile && 'Matching...'}
+                    </>
+                  ) : (
+                    <>
+                      <Users className="w-4 h-4 mr-2" />
+                      {isMobile ? 'Add wrestlers' : `Add new wrestlers (${stats.unmatchedAttendingCount})`}
                     </>
                   )}
                 </Button>
@@ -1031,7 +1161,7 @@ export default function MeetPairings() {
                       <>
                         <TableRow
                           key={wrestler.id}
-                          className={`cursor-pointer ${wrestler.is_flagged || wrestler.discussion_flag ? 'bg-yellow-500/5' : ''} ${selectedWrestlerId === wrestler.id ? 'bg-muted' : ''}`}
+                          className={`cursor-pointer ${wrestler.flag_severity === 'critical' ? 'bg-destructive/5' : wrestler.is_flagged || wrestler.discussion_flag ? 'bg-yellow-500/5' : ''} ${selectedWrestlerId === wrestler.id ? 'bg-muted' : ''}`}
                           onClick={() => setSelectedWrestlerId(prev => prev === wrestler.id ? null : wrestler.id)}
                         >
                           <TableCell className="font-medium">{wrestler.last_name}</TableCell>
@@ -1057,7 +1187,7 @@ export default function MeetPairings() {
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <span className="inline-flex">
-                                    <Flag className="w-4 h-4 text-yellow-500" />
+                                    <Flag className={`w-4 h-4 ${wrestler.flag_severity === 'critical' ? 'text-destructive' : 'text-yellow-500'}`} />
                                   </span>
                                 </TooltipTrigger>
                                 <TooltipContent>{wrestler.flag_reason}</TooltipContent>
@@ -1311,6 +1441,11 @@ export default function MeetPairings() {
                                       <div className="flex items-center justify-between gap-2">
                                         <span className="font-mono text-xs md:text-sm text-muted-foreground">#{matchNumber}</span>
                                         <div className="flex items-center gap-1 md:gap-2">
+                                          {newMatchIds.has(match.id) && (
+                                            <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs">
+                                              New
+                                            </Badge>
+                                          )}
                                           <Badge className={`text-xs ${getMatchQuality(wrestlerA, wrestlerB).className}`}>
                                             {isMobile ? getMatchQuality(wrestlerA, wrestlerB).label.split(' ')[0] : getMatchQuality(wrestlerA, wrestlerB).label}
                                           </Badge>
@@ -1532,6 +1667,16 @@ export default function MeetPairings() {
           </Dialog>
         </Tabs>
       </div>
+
+      {/* Generation Report Sheet */}
+      {generationReportData && (
+        <GenerationReportSheet
+          open={generationReportOpen}
+          onOpenChange={setGenerationReportOpen}
+          matchesCreated={generationReportData.matchesCreated}
+          wrestlersWithZeroMatches={generationReportData.wrestlersWithZeroMatches}
+        />
+      )}
 
       {/* Discussion Flag Dialog */}
       {flagDialogWrestler && currentTeam && meet && (

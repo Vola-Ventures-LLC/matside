@@ -498,7 +498,9 @@ export type Database = {
           match_priority_weight: number
           max_age_diff: number
           max_matches_per_wrestler: number
+          max_weight_diff: number | null
           meet_id: string
+          prefer_cross_team_matches: boolean | null
           teammates_can_wrestle: boolean
           updated_at: string
         }
@@ -512,7 +514,9 @@ export type Database = {
           match_priority_weight?: number
           max_age_diff?: number
           max_matches_per_wrestler?: number
+          max_weight_diff?: number | null
           meet_id: string
+          prefer_cross_team_matches?: boolean | null
           teammates_can_wrestle?: boolean
           updated_at?: string
         }
@@ -526,7 +530,9 @@ export type Database = {
           match_priority_weight?: number
           max_age_diff?: number
           max_matches_per_wrestler?: number
+          max_weight_diff?: number | null
           meet_id?: string
+          prefer_cross_team_matches?: boolean | null
           teammates_can_wrestle?: boolean
           updated_at?: string
         }
@@ -1026,7 +1032,9 @@ export type Database = {
           match_priority_weight: number
           max_age_diff: number
           max_matches_per_wrestler: number
+          max_weight_diff: number | null
           name: string
+          prefer_cross_team_matches: boolean
           primary_color: string | null
           secondary_color: string | null
           teammates_can_wrestle: boolean
@@ -1051,7 +1059,9 @@ export type Database = {
           match_priority_weight?: number
           max_age_diff?: number
           max_matches_per_wrestler?: number
+          max_weight_diff?: number | null
           name: string
+          prefer_cross_team_matches?: boolean
           primary_color?: string | null
           secondary_color?: string | null
           teammates_can_wrestle?: boolean
@@ -1076,7 +1086,9 @@ export type Database = {
           match_priority_weight?: number
           max_age_diff?: number
           max_matches_per_wrestler?: number
+          max_weight_diff?: number | null
           name?: string
+          prefer_cross_team_matches?: boolean
           primary_color?: string | null
           secondary_color?: string | null
           teammates_can_wrestle?: boolean

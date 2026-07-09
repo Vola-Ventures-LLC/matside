@@ -15,8 +15,11 @@ export function Navbar() {
             <span className="font-display text-2xl sm:text-3xl text-primary">MATSIDE</span>
           </Link>
           
-          {/* Desktop nav - placeholder for future links */}
+          {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-8">
+            <Link to="/guides" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Help Center
+            </Link>
           </nav>
           
           {/* Desktop CTA */}
@@ -43,6 +46,13 @@ export function Navbar() {
         {isOpen && (
           <div className="md:hidden py-4 border-t border-border">
             <nav className="flex flex-col gap-4">
+              <Link
+                to="/guides"
+                onClick={() => setIsOpen(false)}
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors px-1"
+              >
+                Help Center
+              </Link>
               <div className="flex flex-col gap-2">
                 <Button asChild variant="outline" className="w-full">
                   <Link to="/auth" onClick={() => setIsOpen(false)}>Sign In</Link>

@@ -1,0 +1,34 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /admin/
+Disallow: /org/
+Disallow: /settings
+Disallow: /login
+Disallow: /signup
+Disallow: /forgot-password
+Disallow: /update-password
+Disallow: /notifications
+Disallow: /referrals
+Disallow: /support
+Disallow: /user/
+
+# Allow marketing/content pages
+Allow: /blog
+Allow: /privacy
+Allow: /terms
+
+# Social media crawlers
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+Sitemap: https://your-domain.com/sitemap.xml

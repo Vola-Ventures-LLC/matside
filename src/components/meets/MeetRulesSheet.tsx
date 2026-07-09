@@ -38,9 +38,11 @@ interface MeetRules {
   match_priority_experience: number;
   match_priority_skill: number;
   max_age_diff: number;
+  max_weight_diff: number | null;
   max_matches_per_wrestler: number;
   teammates_can_wrestle: boolean;
   conflict_min_gap: number;
+  prefer_cross_team_matches: boolean;
 }
 
 interface MatRule {
@@ -80,9 +82,11 @@ export function MeetRulesSheet({
     match_priority_experience: 3,
     match_priority_skill: 4,
     max_age_diff: 1,
+    max_weight_diff: null,
     max_matches_per_wrestler: 4,
     teammates_can_wrestle: false,
     conflict_min_gap: 7,
+    prefer_cross_team_matches: false,
   });
 
   const [matRules, setMatRules] = useState<MatRule[]>([]);
@@ -103,21 +107,23 @@ export function MeetRulesSheet({
       // Fetch team defaults for general rules
       const { data: teamData, error: teamError } = await supabase
         .from('teams')
-        .select('match_priority_age, match_priority_weight, match_priority_experience, match_priority_skill, max_age_diff, max_matches_per_wrestler, teammates_can_wrestle, conflict_min_gap')
+        .select('match_priority_age, match_priority_weight, match_priority_experience, match_priority_skill, max_age_diff, max_weight_diff, max_matches_per_wrestler, teammates_can_wrestle, conflict_min_gap, prefer_cross_team_matches')
         .eq('id', hostTeamId)
         .single();
 
       if (teamError) throw teamError;
-      
+
       const defaults: MeetRules = {
         match_priority_age: teamData.match_priority_age,
         match_priority_weight: teamData.match_priority_weight,
         match_priority_experience: teamData.match_priority_experience,
         match_priority_skill: teamData.match_priority_skill,
         max_age_diff: teamData.max_age_diff,
+        max_weight_diff: teamData.max_weight_diff ?? null,
         max_matches_per_wrestler: teamData.max_matches_per_wrestler,
         teammates_can_wrestle: teamData.teammates_can_wrestle,
         conflict_min_gap: teamData.conflict_min_gap,
+        prefer_cross_team_matches: teamData.prefer_cross_team_matches ?? false,
       };
       setTeamDefaults(defaults);
 
@@ -157,9 +163,11 @@ export function MeetRulesSheet({
           match_priority_experience: meetRulesData.match_priority_experience,
           match_priority_skill: meetRulesData.match_priority_skill,
           max_age_diff: meetRulesData.max_age_diff,
+          max_weight_diff: meetRulesData.max_weight_diff ?? null,
           max_matches_per_wrestler: meetRulesData.max_matches_per_wrestler,
           teammates_can_wrestle: meetRulesData.teammates_can_wrestle,
           conflict_min_gap: meetRulesData.conflict_min_gap,
+          prefer_cross_team_matches: meetRulesData.prefer_cross_team_matches ?? defaults.prefer_cross_team_matches,
         });
         setHasCustomRules(true);
       } else {
@@ -206,9 +214,11 @@ export function MeetRulesSheet({
         match_priority_experience: rules.match_priority_experience,
         match_priority_skill: rules.match_priority_skill,
         max_age_diff: rules.max_age_diff,
+        max_weight_diff: rules.max_weight_diff,
         max_matches_per_wrestler: rules.max_matches_per_wrestler,
         teammates_can_wrestle: rules.teammates_can_wrestle,
         conflict_min_gap: rules.conflict_min_gap,
+        prefer_cross_team_matches: rules.prefer_cross_team_matches,
       };
 
       if (rules.id) {
@@ -485,6 +495,24 @@ export function MeetRulesSheet({
                     />
                   </div>
                   <div className="space-y-2">
+                    <Label htmlFor="maxWeightDiff">Max weight difference (lbs)</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Hard cap — pairs over this limit are ineligible. Leave blank for no cap.
+                    </p>
+                    <Input
+                      id="maxWeightDiff"
+                      type="number"
+                      min={0}
+                      max={100}
+                      placeholder="No limit"
+                      value={rules.max_weight_diff ?? ''}
+                      onChange={(e) => setRules(r => ({
+                        ...r,
+                        max_weight_diff: e.target.value === '' ? null : parseInt(e.target.value) || 0,
+                      }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="maxMatches">Max matches per wrestler</Label>
                     <Input
                       id="maxMatches"
@@ -496,9 +524,9 @@ export function MeetRulesSheet({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="minGap">Min matches gap between assignments</Label>
+                    <Label htmlFor="minGap">Minimum matches between bouts</Label>
                     <p className="text-xs text-muted-foreground">
-                      Minimum time slots between a wrestler's matches (across all mats)
+                      A wrestler won't be scheduled again until at least this many matches have run on any mat. Set to 2–3 for adequate rest.
                     </p>
                     <Input
                       id="minGap"
@@ -524,6 +552,22 @@ export function MeetRulesSheet({
                     onCheckedChange={(v) => setRules(r => ({ ...r, teammates_can_wrestle: v }))}
                   />
                 </div>
+
+                {rules.teammates_can_wrestle && (
+                  <div className="flex items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="preferCrossTeam">Prefer cross-team matches</Label>
+                      <p className="text-xs text-muted-foreground">
+                        When on, same-team pairings are deprioritized but still allowed as a fallback
+                      </p>
+                    </div>
+                    <Switch
+                      id="preferCrossTeam"
+                      checked={rules.prefer_cross_team_matches}
+                      onCheckedChange={(v) => setRules(r => ({ ...r, prefer_cross_team_matches: v }))}
+                    />
+                  </div>
+                )}
               </div>
 
               <Separator />

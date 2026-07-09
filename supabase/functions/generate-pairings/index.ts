@@ -1,53 +1,21 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import {
+  type Wrestler,
+  type TeamSettings,
+  type MatRule,
+  type MatchAssignment,
+  getPairingKey,
+  calculateMatchScore,
+  getWrestlerPairingPriority,
+  matchFitsMatPreference,
+  runLocalSearchSwap,
+  buildDiagnostics,
+} from '../_shared/pairingAlgorithm.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-interface Wrestler {
-  id: string;
-  first_name: string;
-  last_name: string;
-  weight: number;
-  date_of_birth: string;
-  experience: number;
-  skill: number;
-  team_id: string;
-}
-
-interface TeamSettings {
-  match_priority_age: number;
-  match_priority_weight: number;
-  match_priority_experience: number;
-  match_priority_skill: number;
-  max_age_diff: number;
-  max_matches_per_wrestler: number;
-  teammates_can_wrestle: boolean;
-  conflict_min_gap: number;
-}
-
-interface MatRule {
-  mat_number: number;
-  min_age: number;
-  max_age: number;
-  min_experience: number;
-  max_experience: number;
-  min_skill: number;
-  max_skill: number;
-  max_matches: number;
-}
-
-interface MatchAssignment {
-  wrestler_a_id: string;
-  wrestler_b_id: string;
-  wrestler_a: Wrestler;
-  wrestler_b: Wrestler;
-  avg_skill: number;
-  avg_experience: number;
-  attendance_a: string;
-  attendance_b: string;
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -95,7 +63,7 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { meet_id, host_team_id } = await req.json();
+    const { meet_id, host_team_id, incremental = false } = await req.json();
 
     if (!meet_id || !host_team_id) {
       return new Response(
@@ -104,28 +72,38 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Generating pairings for meet ${meet_id}`);
+    console.log(`Generating pairings for meet ${meet_id}, incremental=${incremental}`);
 
     // Mat count will be determined by mat rules (set later after fetching rules)
 
     // First check for meet-specific rules
     const { data: meetRulesData } = await supabase
       .from('meet_rules')
-      .select('match_priority_age, match_priority_weight, match_priority_experience, match_priority_skill, max_age_diff, max_matches_per_wrestler, teammates_can_wrestle, conflict_min_gap')
+      .select('match_priority_age, match_priority_weight, match_priority_experience, match_priority_skill, max_age_diff, max_weight_diff, max_matches_per_wrestler, teammates_can_wrestle, conflict_min_gap, prefer_cross_team_matches')
       .eq('meet_id', meet_id)
       .maybeSingle();
 
     let settings: TeamSettings;
 
     if (meetRulesData) {
-      // Use meet-specific rules
-      settings = meetRulesData;
+      // Use meet-specific rules, falling back to team defaults for nullable override columns
+      const { data: teamSettingsForFallback } = await supabase
+        .from('teams')
+        .select('max_weight_diff, prefer_cross_team_matches')
+        .eq('id', host_team_id)
+        .single();
+
+      settings = {
+        ...meetRulesData,
+        max_weight_diff: meetRulesData.max_weight_diff ?? teamSettingsForFallback?.max_weight_diff ?? null,
+        prefer_cross_team_matches: meetRulesData.prefer_cross_team_matches ?? teamSettingsForFallback?.prefer_cross_team_matches ?? false,
+      };
       console.log('Using meet-specific rules:', settings);
     } else {
       // Fall back to host team settings
       const { data: teamSettings, error: settingsError } = await supabase
         .from('teams')
-        .select('match_priority_age, match_priority_weight, match_priority_experience, match_priority_skill, max_age_diff, max_matches_per_wrestler, teammates_can_wrestle, conflict_min_gap')
+        .select('match_priority_age, match_priority_weight, match_priority_experience, match_priority_skill, max_age_diff, max_weight_diff, max_matches_per_wrestler, teammates_can_wrestle, conflict_min_gap, prefer_cross_team_matches')
         .eq('id', host_team_id)
         .single();
 
@@ -219,65 +197,60 @@ Deno.serve(async (req) => {
 
     console.log(`Found ${wrestlers.length} wrestlers for pairing`);
 
-    // Delete existing matches for this meet
-    await supabase
-      .from('matches')
-      .delete()
-      .eq('meet_id', meet_id);
+    // In incremental mode: keep existing matches, only pair wrestlers with 0 current matches
+    // In full mode: delete all existing matches and re-pair everyone
+    if (!incremental) {
+      await supabase
+        .from('matches')
+        .delete()
+        .eq('meet_id', meet_id);
+    }
 
-    // Calculate age from date of birth
-    const calculateAge = (dob: string): number => {
-      const birthDate = new Date(dob);
-      const today = new Date();
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const monthDiff = today.getMonth() - birthDate.getMonth();
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
+    // For incremental mode: fetch existing matches to seed state
+    const existingMatchCountsMap: Record<string, number> = {};
+    const existingUsedPairings = new Set<string>();
+    const existingMaxOrderByMat: Record<number, number> = {};
+
+    if (incremental) {
+      const { data: existingMatches } = await supabase
+        .from('matches')
+        .select('wrestler_a_id, wrestler_b_id, mat_number, match_order')
+        .eq('meet_id', meet_id);
+
+      if (existingMatches) {
+        for (const m of existingMatches) {
+          // Seed match counts
+          existingMatchCountsMap[m.wrestler_a_id] = (existingMatchCountsMap[m.wrestler_a_id] || 0) + 1;
+          existingMatchCountsMap[m.wrestler_b_id] = (existingMatchCountsMap[m.wrestler_b_id] || 0) + 1;
+          // Seed used pairings to prevent re-matching same pair
+          const key = [m.wrestler_a_id, m.wrestler_b_id].sort().join('-');
+          existingUsedPairings.add(key);
+          // Track max match_order per mat to avoid collision (Fix 8 scope addition)
+          const mat = m.mat_number ?? 0;
+          if (m.match_order !== null) {
+            existingMaxOrderByMat[mat] = Math.max(existingMaxOrderByMat[mat] ?? -1, m.match_order);
+          }
+        }
       }
-      return age;
-    };
+      console.log('Incremental: seeded', Object.keys(existingMatchCountsMap).length, 'existing wrestler counts');
+    }
 
-    // Calculate match score based on priorities (lower is better)
-    const calculateMatchScore = (w1: Wrestler, w2: Wrestler): number => {
-      // Don't match teammates unless allowed
-      if (!settings.teammates_can_wrestle && w1.team_id === w2.team_id) {
-        return Infinity;
-      }
+    // Thin closure wrappers so callers in this handler can omit the extra params
+    const matchScore = (w1: Wrestler, w2: Wrestler) =>
+      calculateMatchScore(w1, w2, settings, attendanceStatusMap);
 
-      const age1 = calculateAge(w1.date_of_birth);
-      const age2 = calculateAge(w2.date_of_birth);
-      const ageDiff = Math.abs(age1 - age2);
+    const pairingPriority = (id: string) =>
+      getWrestlerPairingPriority(id, attendanceStatusMap);
 
-      // Enforce max age difference
-      if (ageDiff > settings.max_age_diff) {
-        return Infinity;
-      }
-
-      const weightDiff = Math.abs(w1.weight - w2.weight);
-      const experienceDiff = Math.abs(w1.experience - w2.experience);
-      const skillDiff = Math.abs(w1.skill - w2.skill);
-
-      // Lower priority number = more important
-      // Invert so higher priority gives higher weight
-      const ageWeight = (5 - settings.match_priority_age) * 10;
-      const weightWeight = (5 - settings.match_priority_weight) * 10;
-      const experienceWeight = (5 - settings.match_priority_experience) * 10;
-      const skillWeight = (5 - settings.match_priority_skill) * 10;
-
-      return (
-        ageDiff * ageWeight +
-        weightDiff * weightWeight +
-        experienceDiff * experienceWeight +
-        skillDiff * skillWeight
-      );
-    };
+    const matPreference = (match: MatchAssignment, matIndex: number) =>
+      matchFitsMatPreference(match, matIndex, matRules);
 
     // Generate all possible pairings with scores
     const pairings: { w1: Wrestler; w2: Wrestler; score: number }[] = [];
     
     for (let i = 0; i < wrestlers.length; i++) {
       for (let j = i + 1; j < wrestlers.length; j++) {
-        const score = calculateMatchScore(wrestlers[i], wrestlers[j]);
+        const score = matchScore(wrestlers[i], wrestlers[j]);
         if (score < Infinity) {
           pairings.push({ w1: wrestlers[i], w2: wrestlers[j], score });
         }
@@ -289,48 +262,55 @@ Deno.serve(async (req) => {
 
     // BALANCED DISTRIBUTION: Round-robin approach
     // Give everyone 1 match before anyone gets 2, etc.
-    // ATTENDANCE-AWARE: Prioritize arriving_late wrestlers in pairing phase
-    // so they get matches before their compatible opponents are used up
+    // ATTENDANCE-AWARE: Prioritize leaving_early wrestlers in pairing phase
     const matchCounts: Record<string, number> = {};
-    wrestlers.forEach(w => matchCounts[w.id] = 0);
+    wrestlers.forEach(w => {
+      // In incremental mode, seed with existing counts
+      matchCounts[w.id] = incremental ? (existingMatchCountsMap[w.id] || 0) : 0;
+    });
+
+    // Track which pairings have been used
+    const usedPairings = new Set<string>(incremental ? existingUsedPairings : []);
+
+    // In incremental mode, only pair wrestlers who currently have 0 matches
+    const wrestlersToMatch = incremental
+      ? wrestlers.filter(w => (existingMatchCountsMap[w.id] || 0) === 0)
+      : wrestlers;
+
+    if (incremental && wrestlersToMatch.length === 0) {
+      return new Response(
+        JSON.stringify({ success: true, matches_created: 0, unassigned_count: 0, wrestlers_with_zero_matches: [], incremental: true, message: 'All attending wrestlers already have matches' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`Incremental mode: ${wrestlersToMatch.length} wrestlers to match (out of ${wrestlers.length})`);
 
     // Track available pairings for each wrestler (count of unused valid pairings)
+    // Must be computed AFTER usedPairings is seeded so scarcity sort is accurate
     const availablePairingsCount: Record<string, number> = {};
     wrestlers.forEach(w => availablePairingsCount[w.id] = 0);
     for (const p of pairings) {
-      availablePairingsCount[p.w1.id]++;
-      availablePairingsCount[p.w2.id]++;
+      if (!usedPairings.has(getPairingKey(p.w1.id, p.w2.id))) {
+        availablePairingsCount[p.w1.id]++;
+        availablePairingsCount[p.w2.id]++;
+      }
     }
 
-    // Track which pairings have been used
-    const usedPairings = new Set<string>();
-    const getPairingKey = (w1Id: string, w2Id: string) => 
-      [w1Id, w2Id].sort().join('-');
-
     const selectedMatches: MatchAssignment[] = [];
-
-    // Helper: Get pairing priority for a wrestler (lower = process first in round-robin)
-    // arriving_late wrestlers get highest priority (0) since their opponents may get used up
-    // leaving_early wrestlers also need priority (1) to ensure they get scheduled
-    // regular attending wrestlers get normal priority (2)
-    const getWrestlerPairingPriority = (wrestlerId: string): number => {
-      const status = attendanceStatusMap[wrestlerId];
-      if (status === 'arriving_late') return 0; // Process first - limited scheduling window
-      if (status === 'leaving_early') return 1; // Process second - needs early slots
-      return 2; // Regular - most flexible
-    };
 
     // Round-robin: iterate through match count levels (0, 1, 2, 3...)
     for (let targetCount = 0; targetCount < settings.max_matches_per_wrestler; targetCount++) {
       // Find all wrestlers currently at this count level
-      let wrestlersAtLevel = wrestlers
+      // In incremental mode, only process wrestlers that started with 0 matches
+      let wrestlersAtLevel = wrestlersToMatch
         .filter(w => matchCounts[w.id] === targetCount)
         .map(w => w.id);
-      
-      // Sort by: 1) attendance priority (arriving_late first), 2) available pairings (fewest first)
+
+      // Sort by: 1) attendance priority (leaving_early first), 2) available pairings (fewest first)
       wrestlersAtLevel.sort((a, b) => {
-        const priorityA = getWrestlerPairingPriority(a);
-        const priorityB = getWrestlerPairingPriority(b);
+        const priorityA = pairingPriority(a);
+        const priorityB = pairingPriority(b);
         if (priorityA !== priorityB) return priorityA - priorityB;
         return availablePairingsCount[a] - availablePairingsCount[b];
       });
@@ -402,6 +382,12 @@ Deno.serve(async (req) => {
 
     console.log(`Generated ${selectedMatches.length} matches before mat assignment`);
 
+    // --- LOCAL SEARCH SWAP IMPROVEMENT (Fix 1) ---
+    // Delegate to shared pure function; splice result back into the array reference.
+    const swappedMatches = runLocalSearchSwap(selectedMatches, settings, attendanceStatusMap);
+    selectedMatches.splice(0, selectedMatches.length, ...swappedMatches);
+    console.log(`Local search swap: complete`);
+
     // --- MAT ASSIGNMENT LOGIC ---
     // STRICT ROUND-ROBIN: Assign one match to each mat in turn, respecting rest gaps
     // Mat rules are preferences - matches that don't fit preferences go to "open" slots
@@ -446,22 +432,6 @@ Deno.serve(async (req) => {
       return gap >= settings.conflict_min_gap;
     };
 
-    // Helper: Check if match satisfies mat rules (preference check)
-    const matchFitsMatPreference = (match: MatchAssignment, matIndex: number): boolean => {
-      const rule = matRules.find(r => r.mat_number === matIndex + 1);
-      if (!rule) return true; // No rule = open mat
-      
-      const age1 = calculateAge(match.wrestler_a.date_of_birth);
-      const age2 = calculateAge(match.wrestler_b.date_of_birth);
-      const avgAge = (age1 + age2) / 2;
-      
-      if (avgAge < rule.min_age || avgAge > rule.max_age) return false;
-      if (match.avg_experience < rule.min_experience || match.avg_experience > rule.max_experience) return false;
-      if (match.avg_skill < rule.min_skill || match.avg_skill > rule.max_skill) return false;
-      
-      return true;
-    };
-
     // Helper: Check if mat has reached max matches
     const matAtCapacity = (matIndex: number): boolean => {
       const rule = matRules.find(r => r.mat_number === matIndex + 1);
@@ -491,7 +461,7 @@ Deno.serve(async (req) => {
         }
         
         // Check preference if required
-        if (requirePreference && !matchFitsMatPreference(match, matIndex)) {
+        if (requirePreference && !matPreference(match, matIndex)) {
           continue;
         }
         
@@ -567,11 +537,20 @@ Deno.serve(async (req) => {
     for (let matIndex = 0; matIndex < matCount; matIndex++) {
       const matNumber = matIndex + 1;
       const matMatches = matQueues[matIndex];
-      
+
+      // In incremental mode, offset new match_order values past the existing maximum
+      // to avoid collision with already-existing matches on this mat.
+      // existingMaxOrderByMat stores raw match_order values (e.g. 105 = mat 1, order 5).
+      // The within-mat offset is (existingMax % 100) + 1.
+      const existingMax = existingMaxOrderByMat[matNumber];
+      const orderOffset = incremental && existingMax !== undefined
+        ? (existingMax % 100) + 1
+        : 0;
+
       for (let orderIndex = 0; orderIndex < matMatches.length; orderIndex++) {
         const match = matMatches[orderIndex];
         // Match number format: mat*100 + order (e.g., 100, 101, 102 for mat 1)
-        const matchOrder = (matNumber * 100) + orderIndex;
+        const matchOrder = (matNumber * 100) + orderOffset + orderIndex;
         
         matchesToInsert.push({
           meet_id,
@@ -587,11 +566,13 @@ Deno.serve(async (req) => {
     console.log(`Inserting ${matchesToInsert.length} matches across ${matCount} mats`);
     console.log(`Matches per mat: ${matQueues.map((q, i) => `Mat ${i + 1}: ${q.length}`).join(', ')}`);
 
-    // Insert matches
+    // Insert matches (request IDs back for incremental "New" badge tracking)
+    let newMatchIds: string[] = [];
     if (matchesToInsert.length > 0) {
-      const { error: insertError } = await supabase
+      const { data: insertedMatches, error: insertError } = await supabase
         .from('matches')
-        .insert(matchesToInsert);
+        .insert(matchesToInsert)
+        .select('id');
 
       if (insertError) {
         console.error('Error inserting matches:', insertError);
@@ -600,14 +581,28 @@ Deno.serve(async (req) => {
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+      newMatchIds = insertedMatches?.map(m => m.id) ?? [];
+    }
+
+    // Build diagnostics: wrestlers with 0 assigned matches (Fix 6)
+    const wrestlersWithZeroMatches = buildDiagnostics(wrestlers, selectedMatches, matchesToInsert);
+    const wrestlersPaired = wrestlers.length - wrestlersWithZeroMatches.length;
+
+    if (wrestlersWithZeroMatches.length > 0) {
+      console.log('Wrestlers with 0 matches:', wrestlersWithZeroMatches);
     }
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         matches_created: matchesToInsert.length,
-        wrestlers_paired: Object.keys(matchCounts).filter(id => matchCounts[id] > 0).length,
+        wrestlers_paired: wrestlersPaired,
         matches_per_mat: matQueues.map((q, i) => ({ mat: i + 1, count: q.length })),
+        unassigned_count: wrestlersWithZeroMatches.length,
+        wrestlers_with_zero_matches: wrestlersWithZeroMatches,
+        incremental,
+        // IDs of newly inserted matches, used by the frontend to show "New" badges
+        new_match_ids: incremental ? newMatchIds : [],
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

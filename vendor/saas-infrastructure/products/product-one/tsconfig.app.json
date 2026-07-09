@@ -1,0 +1,11 @@
+{
+  "extends": "@saas-infra/config/tsconfig/react-app.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "strictNullChecks": false
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,120 @@
+version: 2
+updates:
+  # Root workspace
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "automated"
+
+  # Shared packages
+  - package-ecosystem: "npm"
+    directory: "/packages/config"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "config"
+
+  - package-ecosystem: "npm"
+    directory: "/packages/utils"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "utils"
+
+  - package-ecosystem: "npm"
+    directory: "/packages/ui"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ui"
+
+  - package-ecosystem: "npm"
+    directory: "/packages/auth"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "auth"
+
+  - package-ecosystem: "npm"
+    directory: "/packages/billing"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "billing"
+
+  - package-ecosystem: "npm"
+    directory: "/packages/admin-kit"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "admin"
+
+  - package-ecosystem: "npm"
+    directory: "/packages/support"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "support"
+
+  - package-ecosystem: "npm"
+    directory: "/packages/content"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "content"
+
+  - package-ecosystem: "npm"
+    directory: "/packages/emails"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "emails"
+
+  # Products
+  - package-ecosystem: "npm"
+    directory: "/products/product-one"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "product-one"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "ci-cd"

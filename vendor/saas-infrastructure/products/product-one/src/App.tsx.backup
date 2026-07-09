@@ -1,0 +1,568 @@
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { SupabaseProvider, AuthProvider, RoleContextProvider, ProtectedRoute, PublicOnlyRoute } from "@saas-infra/auth";
+import { supabase } from "@/integrations/supabase/client";
+import { OrgProvider } from "@/hooks/useOrgContext";
+import { LocaleProvider } from "@/hooks/useLocale";
+import { ImpersonationBanner } from "@/components/ImpersonationBanner";
+import { useAppFeatures } from "@/hooks/useAppFeatures";
+// Layouts
+import { PublicLayout } from "@/layouts/PublicLayout";
+import { AppLayout } from "@/layouts/AppLayout";
+
+// Public Pages
+import Landing from "@/pages/Landing";
+import Privacy from "@/pages/Privacy";
+import Terms from "@/pages/Terms";
+
+// Auth Pages
+import Login from "@/pages/Login";
+import Signup from "@/pages/Signup";
+import ForgotPassword from "@/pages/ForgotPassword";
+import UpdatePassword from "@/pages/UpdatePassword";
+
+// App Pages
+import Dashboard from "@/pages/Dashboard";
+import Settings from "@/pages/Settings";
+import Admin from "@/pages/Admin";
+import AdminUsers from "@/pages/AdminUsers";
+import AdminBilling from "@/pages/AdminBilling";
+import AdminBillingOverview from "@/pages/AdminBillingOverview";
+import AdminBillingAllProducts from "@/pages/AdminBillingAllProducts";
+import AdminBillingSubscriptions from "@/pages/AdminBillingSubscriptions";
+import AdminBillingCredits from "@/pages/AdminBillingCredits";
+import AdminBillingProducts from "@/pages/AdminBillingProducts";
+import AdminBillingConnect from "@/pages/AdminBillingConnect";
+import AdminBillingCoupons from "@/pages/AdminBillingCoupons";
+import UserBilling from "@/pages/UserBilling";
+import AdminBrand from "@/pages/AdminBrand";
+import AdminTemplates from "@/pages/AdminTemplates";
+import AdminEmail from "@/pages/AdminEmail";
+import AdminEmailDomains from "@/pages/AdminEmailDomains";
+import AdminChangelog from "@/pages/AdminChangelog";
+import AdminAudit from "@/pages/AdminAudit";
+import AdminLoginEvents from "@/pages/AdminLoginEvents";
+import AdminRoles from "@/pages/AdminRoles";
+import AdminBlog from "@/pages/AdminBlog";
+import AdminBlogEditor from "@/pages/AdminBlogEditor";
+import UserAnalytics from "@/pages/UserAnalytics";
+import ContentAnalytics from "@/pages/ContentAnalytics";
+import BillingAnalytics from "@/pages/BillingAnalytics";
+import ContentPlanner from "@/pages/ContentPlanner";
+import SetupGuide from "@/pages/SetupGuide";
+import AdminDocs from "@/pages/AdminDocs";
+import AdminGuides from "@/pages/AdminGuides";
+import AdminGuidesSection from "@/pages/AdminGuidesSection";
+import AdminGuidesArticleEditor from "@/pages/AdminGuidesArticleEditor";
+import Blog from "@/pages/Blog";
+import BlogPost from "@/pages/BlogPost";
+import Guides from "@/pages/Guides";
+import Referrals from "@/pages/Referrals";
+import AdminSupport from "@/pages/AdminSupport";
+import AdminSupportInsights from "@/pages/AdminSupportInsights";
+import AdminSupportSatisfaction from "@/pages/AdminSupportSatisfaction";
+import AdminTicketDetail from "@/pages/AdminTicketDetail";
+import AdminAffiliates from "@/pages/AdminAffiliates";
+import AdminAffiliateSettings from "@/pages/AdminAffiliateSettings";
+import AdminAffiliateTiers from "@/pages/AdminAffiliateTiers";
+import AdminAffiliateList from "@/pages/AdminAffiliateList";
+import AdminAffiliatePayouts from "@/pages/AdminAffiliatePayouts";
+import AdminWebhooks from "@/pages/AdminWebhooks";
+import AdminOrgs from "@/pages/AdminOrgs";
+import AdminDrips from "@/pages/AdminDrips";
+import AdminRateLimits from "@/pages/AdminRateLimits";
+import AdminOnboarding from "@/pages/AdminOnboarding";
+import AdminCosts from "@/pages/AdminCosts";
+import Unsubscribe from "@/pages/Unsubscribe";
+import Notifications from "@/pages/Notifications";
+import UserSupport from "@/pages/UserSupport";
+
+// Org Pages
+import {
+  OrgDashboard,
+  OrgMembers,
+  OrgBilling,
+  OrgBillingUsage,
+  OrgSettings,
+} from "@/pages/org";
+// Error Pages
+import NotFound from "@/pages/NotFound";
+
+const queryClient = new QueryClient();
+
+// Wrapper component to access useAppFeatures hook
+function AppContent({ children }: { children: React.ReactNode }) {
+  const { orgsEnabled } = useAppFeatures();
+  return <OrgProvider orgsEnabled={orgsEnabled}>{children}</OrgProvider>;
+}
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <SupabaseProvider value={supabase}>
+    <AuthProvider>
+      <LocaleProvider>
+        <RoleContextProvider>
+          <AppContent>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <ImpersonationBanner />
+          <BrowserRouter>
+          <Routes>
+            {/* Public Layout Routes */}
+            <Route element={<PublicLayout />}>
+              <Route path="/" element={<Landing />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/blog" element={<Blog />} />
+              <Route path="/blog/:slug" element={<BlogPost />} />
+              <Route path="/unsubscribe" element={<Unsubscribe />} />
+            </Route>
+
+            {/* Auth Routes (Public Only - redirect if logged in) */}
+            <Route
+              path="/login"
+              element={
+                <PublicOnlyRoute>
+                  <Login />
+                </PublicOnlyRoute>
+              }
+            />
+            <Route
+              path="/signup"
+              element={
+                <PublicOnlyRoute>
+                  <Signup />
+                </PublicOnlyRoute>
+              }
+            />
+            <Route
+              path="/forgot-password"
+              element={
+                <PublicOnlyRoute>
+                  <ForgotPassword />
+                </PublicOnlyRoute>
+              }
+            />
+            <Route path="/update-password" element={<UpdatePassword />} />
+
+            {/* App Layout Routes (Protected) */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/guides" element={<Guides />} />
+              <Route path="/guides/role/:roleSlug" element={<Guides />} />
+              <Route path="/guides/:sectionSlug" element={<Guides />} />
+              <Route path="/guides/:sectionSlug/:articleSlug" element={<Guides />} />
+              <Route path="/referrals" element={<Referrals />} />
+              <Route path="/notifications" element={<Notifications />} />
+              <Route path="/support" element={<UserSupport />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/user/billing" element={<UserBilling />} />
+
+              {/* Organization Routes */}
+              <Route path="/org/dashboard" element={<OrgDashboard />} />
+              <Route path="/team/members" element={<OrgMembers />} />
+              <Route path="/billing" element={<OrgBilling />} />
+              <Route path="/billing/usage" element={<OrgBillingUsage />} />
+              <Route path="/settings/org" element={<OrgSettings />} />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <Admin />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/users"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminUsers />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/roles"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminRoles />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/billing"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminBilling />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/billing/overview"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminBillingOverview />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/billing/all-products"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminBillingAllProducts />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/billing/subscriptions"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminBillingSubscriptions />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/billing/credits"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminBillingCredits />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/billing/products"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminBillingProducts />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/billing/connect"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminBillingConnect />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/billing/coupons"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminBillingCoupons />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/brand"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminBrand />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/templates"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminTemplates />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/email"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminEmail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/email/domains"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminEmailDomains />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/changelog"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminChangelog />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/audit"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminAudit />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/users/logins"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminLoginEvents />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/blog"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminBlog />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/blog/new"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminBlogEditor />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/blog/edit/:id"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminBlogEditor />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/users/analytics"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <UserAnalytics />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/content/analytics"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <ContentAnalytics />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/billing/analytics"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <BillingAnalytics />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/content"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <ContentPlanner />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/guides"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminGuides />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/guides/sections/:sectionId"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminGuidesSection />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/guides/sections/:sectionId/new"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminGuidesArticleEditor />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/guides/articles/new"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminGuidesArticleEditor />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/guides/articles/:articleId/edit"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminGuidesArticleEditor />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/docs"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminDocs />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/setup"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <SetupGuide />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/support"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminSupport />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/support/insights"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminSupportInsights />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/support/satisfaction"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminSupportSatisfaction />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/support/tickets/:id"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminTicketDetail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/affiliates"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminAffiliates />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/affiliates/settings"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminAffiliateSettings />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/affiliates/tiers"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminAffiliateTiers />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/affiliates/list"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminAffiliateList />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/affiliates/payouts"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminAffiliatePayouts />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/webhooks"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminWebhooks />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/orgs"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminOrgs />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/drips"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminDrips />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/rate-limits"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminRateLimits />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/onboarding"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminOnboarding />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/costs"
+                element={
+                  <ProtectedRoute requireOwner>
+                    <AdminCosts />
+                  </ProtectedRoute>
+                }
+              />
+            </Route>
+
+            {/* 404 */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+          </TooltipProvider>
+        </AppContent>
+      </RoleContextProvider>
+      </LocaleProvider>
+    </AuthProvider>
+    </SupabaseProvider>
+  </QueryClientProvider>
+);
+
+export default App;

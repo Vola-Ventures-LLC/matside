@@ -1,0 +1,119 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "products/product-one/**"
+      - "packages/**"
+      - ".github/workflows/e2e.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "products/product-one/**"
+      - "packages/**"
+      - ".github/workflows/e2e.yml"
+
+jobs:
+  e2e-tests:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2]
+        shardTotal: [2]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @saas-infra/product-one exec playwright install --with-deps chromium
+
+      - name: Build product-one
+        run: pnpm --filter @saas-infra/product-one build
+
+      - name: Create .env.test file
+        working-directory: products/product-one
+        run: |
+          cat > .env.test << EOF
+          VITE_SUPABASE_URL_TEST=${{ secrets.VITE_SUPABASE_URL_TEST }}
+          VITE_SUPABASE_ANON_KEY_TEST=${{ secrets.VITE_SUPABASE_ANON_KEY_TEST }}
+          SUPABASE_SERVICE_ROLE_KEY_TEST=${{ secrets.SUPABASE_SERVICE_ROLE_KEY_TEST }}
+          TEST_USER_EMAIL=${{ secrets.TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD=${{ secrets.TEST_USER_PASSWORD }}
+          TEST_ADMIN_EMAIL=${{ secrets.TEST_ADMIN_EMAIL }}
+          TEST_ADMIN_PASSWORD=${{ secrets.TEST_ADMIN_PASSWORD }}
+          TEST_OWNER_EMAIL=${{ secrets.TEST_OWNER_EMAIL }}
+          TEST_OWNER_PASSWORD=${{ secrets.TEST_OWNER_PASSWORD }}
+          EOF
+
+      - name: Run Playwright tests
+        working-directory: products/product-one
+        run: pnpm test:e2e --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-${{ matrix.shardIndex }}
+          path: products/product-one/playwright-report/
+          retention-days: 14
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.shardIndex }}
+          path: products/product-one/test-results/
+          retention-days: 7
+
+      - name: Upload video recordings
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: videos-${{ matrix.shardIndex }}
+          path: products/product-one/test-results/**/*.webm
+          retention-days: 7
+
+  e2e-report:
+    name: Publish E2E Report
+    if: always()
+    needs: [e2e-tests]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: playwright-report-*
+          path: all-reports
+          merge-multiple: true
+
+      - name: Merge Playwright reports
+        run: |
+          npx playwright merge-reports --reporter html all-reports
+
+      - name: Upload merged report
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-merged
+          path: playwright-report/
+          retention-days: 14

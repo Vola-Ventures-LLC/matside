@@ -25,6 +25,8 @@ import LeagueInvitations from "./pages/league/LeagueInvitations";
 import LeagueSettings from "./pages/league/LeagueSettings";
 import PrivacyPolicy from "./pages/legal/PrivacyPolicy";
 import TermsOfService from "./pages/legal/TermsOfService";
+import Guides from "./pages/Guides";
+import GuideArticle from "./pages/GuideArticle";
 
 const queryClient = new QueryClient();
 
@@ -156,6 +158,10 @@ function AppRoutes() {
       {/* Legal Pages */}
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
+
+      {/* Help Center */}
+      <Route path="/guides" element={<Guides />} />
+      <Route path="/guides/:sectionSlug/:articleSlug" element={<GuideArticle />} />
       
       {/* Public Pages */}
       <Route path="/public/meet/:token" element={<PublicMeetView />} />

@@ -5,9 +5,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, Calendar, Trophy } from 'lucide-react';
 import { JoinLeagueModal } from '@/components/team/JoinLeagueModal';
+import { CreateMeetSheet } from '@/components/meets/CreateMeetSheet';
 
 export default function Dashboard() {
   const [joinLeagueOpen, setJoinLeagueOpen] = useState(false);
+  const [createMeetOpen, setCreateMeetOpen] = useState(false);
   const { currentTeam } = useTeam();
   const [stats, setStats] = useState({
     wrestlerCount: 0,
@@ -108,16 +110,16 @@ export default function Dashboard() {
                 <p className="text-xs md:text-sm text-muted-foreground truncate">Add or edit wrestlers</p>
               </div>
             </a>
-            <a 
-              href="/meets/hosting" 
-              className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+            <button
+              onClick={() => setCreateMeetOpen(true)}
+              className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors w-full text-left"
             >
               <Calendar className="w-5 h-5 text-success flex-shrink-0" />
               <div className="min-w-0">
                 <p className="font-medium text-sm md:text-base">Host a Meet</p>
                 <p className="text-xs md:text-sm text-muted-foreground truncate">Create a new wrestling event</p>
               </div>
-            </a>
+            </button>
             <button 
               onClick={() => setJoinLeagueOpen(true)}
               className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors w-full text-left"
@@ -132,10 +134,19 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <JoinLeagueModal 
-        open={joinLeagueOpen} 
+      <JoinLeagueModal
+        open={joinLeagueOpen}
         onOpenChange={setJoinLeagueOpen}
       />
+
+      {currentTeam && (
+        <CreateMeetSheet
+          teamId={currentTeam.id}
+          open={createMeetOpen}
+          onOpenChange={setCreateMeetOpen}
+          onSuccess={() => {}}
+        />
+      )}
     </DashboardLayout>
   );
 }

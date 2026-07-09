@@ -1,0 +1,22 @@
+# Run lint-staged for code quality
+pnpm exec lint-staged
+
+# Check for secrets (excluding .husky, .md, and .semgrep files)
+echo "Scanning for secrets..."
+FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -v '\.md$' | grep -v '^\.husky/' | grep -v '^\.semgrep/' || true)
+
+if [ -n "$FILES" ]; then
+  if echo "$FILES" | xargs grep -l "eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*" 2>/dev/null; then
+    echo "Potential JWT token found in staged files!"
+    echo "Remove tokens before committing."
+    exit 1
+  fi
+
+  if echo "$FILES" | xargs grep -l "sk_live_[a-zA-Z0-9]*\|pk_live_[a-zA-Z0-9]*" 2>/dev/null; then
+    echo "Potential Stripe key found in staged files!"
+    echo "Remove API keys before committing."
+    exit 1
+  fi
+fi
+
+echo "Pre-commit checks passed"

@@ -43,6 +43,7 @@ import { format, parseISO } from 'date-fns';
 import { ManageAttendanceSheet } from '@/components/meets/ManageAttendanceSheet';
 import { MeetDetailsSheet } from '@/components/meets/MeetDetailsSheet';
 import { EditMeetSheet } from '@/components/meets/EditMeetSheet';
+import { CreateMeetSheet } from '@/components/meets/CreateMeetSheet';
 import { MeetCard } from '@/components/meets/MeetCard';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -97,6 +98,7 @@ export default function Meets() {
   const [attendanceMeet, setAttendanceMeet] = useState<Meet | null>(null);
   const [detailsMeet, setDetailsMeet] = useState<Meet | null>(null);
   const [editingMeet, setEditingMeet] = useState<Meet | null>(null);
+  const [createMeetOpen, setCreateMeetOpen] = useState(false);
 
   const getContrastColor = (hexColor: string | null) => {
     if (!hexColor) return 'hsl(var(--foreground))';
@@ -491,7 +493,7 @@ export default function Meets() {
               View meets, manage attendance, and coordinate pairings
             </p>
           </div>
-          <Button className="btn-primary w-full sm:w-auto">
+          <Button className="btn-primary w-full sm:w-auto" onClick={() => setCreateMeetOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Create Meet
           </Button>
@@ -567,6 +569,15 @@ export default function Meets() {
           teamId={currentTeam.id}
           open={!!editingMeet}
           onOpenChange={(open) => !open && setEditingMeet(null)}
+          onSuccess={fetchData}
+        />
+      )}
+
+      {currentTeam && (
+        <CreateMeetSheet
+          teamId={currentTeam.id}
+          open={createMeetOpen}
+          onOpenChange={setCreateMeetOpen}
           onSuccess={fetchData}
         />
       )}

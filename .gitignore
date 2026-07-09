@@ -30,6 +30,12 @@ pnpm-debug.log*
 
 # Test output
 coverage/
+.auth/
+**/.auth/
+test-results/
+**/test-results/
+playwright-report/
+**/playwright-report/
 
 # Vite
 *.local
