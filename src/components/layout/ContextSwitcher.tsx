@@ -16,13 +16,22 @@ import { Badge } from '@/components/ui/badge';
 export function ContextSwitcher() {
   const navigate = useNavigate();
   const { contexts, currentContext, setCurrentContext } = useUserContext();
-  const { getTeamRole, currentTeamRole } = useTeam();
+  const { teams, getTeamRole, currentTeamRole, setCurrentTeam } = useTeam();
 
   const teamContexts = contexts.filter((c) => c.type === 'team');
   const leagueContexts = contexts.filter((c) => c.type === 'league');
 
   const handleContextSwitch = (context: UserContextItem) => {
     setCurrentContext(context);
+    // TeamContext (used by Roster, Dashboard, Meets, etc.) tracks its own
+    // currentTeam independently of UserContext's currentContext — keep them
+    // in sync so switching teams here actually changes what those pages show.
+    if (context.type === 'team') {
+      const matchedTeam = teams.find((t) => t.id === context.id);
+      if (matchedTeam) {
+        setCurrentTeam(matchedTeam);
+      }
+    }
     // Navigate to appropriate dashboard
     if (context.type === 'league') {
       navigate('/league/dashboard');
